@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>I-Vision — Industrial Computer Vision Platform</title>
+<meta name="description" content="I-Vision is a self-hosted computer vision platform: annotate, train, and deploy AI vision models in-house, completely offline.">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04070d;
+    --bg-2:#080d18;
+    --panel:#0b1220;
+    --panel-2:#0e1626;
+    --cyan:#4DEBFF;
+    --cyan-dim:#1CB8D9;
+    --blue:#2E6FF2;
+    --amber:#FF8A3D;
+    --good:#39FFB0;
+    --line:rgba(77,235,255,0.16);
+    --line-soft:rgba(77,235,255,0.08);
+    --text:#D9F3FF;
+    --muted:#7C93B3;
+    --shadow-glow: 0 0 40px rgba(77,235,255,0.12);
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    font-family:'Rajdhani',sans-serif;
+    font-size:17px;
+    color:var(--text);
+    background:var(--bg);
+    overflow-x:hidden;
+    line-height:1.6;
+    position:relative;
+  }
+  /* subtle global grid texture — present the full length of the page, not just the hero */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(77,235,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(77,235,255,0.045) 1px, transparent 1px);
+    background-size:48px 48px;
+  }
+  /* cursor-follow glow: a soft light that trails the pointer across the whole site */
+  .cursor-glow{
+    position:fixed; top:0; left:0; width:520px; height:520px; z-index:2; pointer-events:none;
+    background:radial-gradient(circle, rgba(77,235,255,0.10) 0%, rgba(77,235,255,0.04) 35%, transparent 70%);
+    transform:translate(-50%,-50%); will-change:transform; transition:opacity .3s ease; opacity:0;
+  }
+  /* scanline sweep overlay: a thin light band drifting down the viewport, HUD-style */
+  .scanline-overlay{
+    position:fixed; inset:0; z-index:3; pointer-events:none; overflow:hidden;
+  }
+  .scanline-overlay::before{
+    content:""; position:absolute; left:0; right:0; height:140px; top:-140px;
+    background:linear-gradient(180deg, transparent, rgba(77,235,255,0.05) 45%, rgba(77,235,255,0.09) 50%, rgba(77,235,255,0.05) 55%, transparent);
+    animation:scandrift 9s linear infinite;
+  }
+  @keyframes scandrift{ 0%{ transform:translateY(0); } 100%{ transform:translateY(calc(100vh + 280px)); } }
+
+  /* HUD viewfinder corners — the same bracket language as the hero, framing each section intro */
+  .hud-frame{ position:relative; padding:10px 0 10px 22px; }
+  .hud-frame::before, .hud-frame::after{
+    content:""; position:absolute; width:14px; height:14px; border:2px solid var(--cyan); opacity:.6;
+    filter:drop-shadow(0 0 4px rgba(77,235,255,0.6));
+  }
+  .hud-frame::before{ top:0; left:0; border-right:none; border-bottom:none; }
+  .hud-frame::after{ bottom:0; left:0; border-right:none; border-top:none; }
+
+  /* shine-sweep + tilt-ready surface for interactive cards */
+  .tilt-card{ position:relative; overflow:hidden; transform-style:preserve-3d; will-change:transform; }
+  .tilt-card::after{
+    content:""; position:absolute; top:0; left:-60%; width:40%; height:100%; z-index:1; pointer-events:none;
+    background:linear-gradient(100deg, transparent, rgba(77,235,255,0.16), transparent);
+    transform:skewX(-18deg) translateX(0); transition:transform .9s cubic-bezier(.2,.7,.3,1);
+  }
+  .tilt-card:hover::after{ transform:skewX(-18deg) translateX(340%); }
+
+  /* icon draw-in: svg strokes animate from hidden to fully drawn when revealed */
+  .icon-circle svg path, .icon-circle svg polygon, .icon-circle svg rect, .icon-circle svg circle,
+  .feat-icon svg path, .feat-icon svg polyline, .feat-icon svg line{
+    transition: stroke-dashoffset 1.1s cubic-bezier(.3,.7,.2,1);
+  }
+
+  /* ---------- BOOT SEQUENCE ---------- */
+  .boot-loader{
+    position:fixed; inset:0; z-index:10000; background:var(--bg);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    transition:opacity .6s ease, visibility .6s ease; cursor:pointer;
+  }
+  .boot-loader.done{ opacity:0; visibility:hidden; }
+  .boot-inner{ width:340px; max-width:80vw; }
+  .boot-logo{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:22px; letter-spacing:4px; color:#fff; text-align:center; margin-bottom:22px; text-shadow:0 0 16px rgba(77,235,255,0.6); }
+  .boot-lines{ font-family:'Rajdhani',sans-serif; font-size:12.5px; color:var(--cyan); letter-spacing:1px; min-height:80px; margin-bottom:16px; line-height:1.9; }
+  .boot-lines div{ opacity:0; animation:bootline .4s ease forwards; }
+  @keyframes bootline{ from{ opacity:0; transform:translateX(-6px);} to{ opacity:1; transform:translateX(0);} }
+  .boot-bar{ height:2px; background:rgba(77,235,255,0.12); border-radius:2px; overflow:hidden; }
+  .boot-bar-fill{ height:100%; width:0%; background:linear-gradient(90deg, var(--blue), var(--cyan)); box-shadow:0 0 10px var(--cyan); transition:width .3s linear; }
+  .boot-skip{ text-align:center; margin-top:16px; font-size:10.5px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',sans-serif; }
+  @media (max-width:700px){ .boot-loader{ display:none; } }
+
+  /* ---------- CUSTOM CURSOR (fine-pointer devices only) ---------- */
+  @media (hover:hover) and (pointer:fine){
+    body.custom-cursor, body.custom-cursor a, body.custom-cursor button{ cursor:none; }
+  }
+  .cursor-dot{ position:fixed; top:0; left:0; width:5px; height:5px; border-radius:50%; background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan); pointer-events:none; z-index:9999; transform:translate(-50%,-50%); opacity:0; transition:opacity .2s ease; }
+  .cursor-ring{ position:fixed; top:0; left:0; width:32px; height:32px; border:1.5px solid var(--cyan); border-radius:50%;
+    pointer-events:none; z-index:9998; transform:translate(-50%,-50%); opacity:0;
+    transition:width .25s ease, height .25s ease, border-radius .25s ease, opacity .2s ease, border-color .25s ease; }
+  .cursor-ring.active{ opacity:.75; }
+  .cursor-ring.hovering{ width:52px; height:52px; border-radius:8px; border-color:var(--good); }
+
+  /* ---------- SECTION SEAMS (diagonal dividers between sections) ---------- */
+  .seam{ position:relative; height:64px; margin-top:-1px; z-index:1; pointer-events:none; }
+  .seam-a{ background:var(--bg-2); clip-path:polygon(0 100%, 100% 0, 100% 100%); }
+  .seam-b{ background:var(--bg); clip-path:polygon(0 0, 100% 100%, 0 100%); }
+  @media (max-width:700px){ .seam{ height:30px; } }
+
+  /* ---------- GHOST SECTION NUMBERS ---------- */
+  .ghost-num{
+    position:absolute; top:18px; right:24px; z-index:0; pointer-events:none; user-select:none;
+    font-family:'Orbitron',sans-serif; font-weight:900; font-size:150px; line-height:1;
+    color:transparent; -webkit-text-stroke:1px rgba(77,235,255,0.14); letter-spacing:0;
+  }
+  @media (max-width:900px){ .ghost-num{ font-size:90px; } }
+  @media (max-width:600px){ .ghost-num{ display:none; } }
+
+  /* ---------- SIDE SCROLL-PROGRESS NAV ---------- */
+  .side-nav{ position:fixed; right:28px; top:50%; transform:translateY(-50%); z-index:60; display:flex; flex-direction:column; gap:18px; }
+  .side-nav a{
+    width:9px; height:9px; border-radius:50%; border:1.5px solid rgba(77,235,255,0.4); display:block; position:relative;
+    transition:all .3s ease;
+  }
+  .side-nav a::after{
+    content:attr(data-label); position:absolute; right:22px; top:50%; transform:translateY(-50%);
+    font-family:'Orbitron',sans-serif; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan);
+    white-space:nowrap; opacity:0; transition:opacity .25s ease; background:rgba(4,7,13,0.85); padding:5px 10px; border-radius:4px; border:1px solid var(--line);
+  }
+  .side-nav a:hover::after{ opacity:1; }
+  .side-nav a.active{ border-color:var(--cyan); background:var(--cyan); box-shadow:0 0 10px var(--cyan); transform:scale(1.15); }
+  @media (max-width:980px){ .side-nav{ display:none; } }
+
+  h1,h2,h3,h4,.orbitron{ font-family:'Orbitron',sans-serif; color:#fff; letter-spacing:0.5px; }
+  a{ color:inherit; text-decoration:none; }
+  img{ max-width:100%; display:block; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 32px; position:relative; z-index:1; }
+  section{ position:relative; }
+  ::selection{ background:rgba(77,235,255,0.3); color:#fff; }
+  ::-webkit-scrollbar{ width:10px; }
+  ::-webkit-scrollbar-track{ background:var(--bg); }
+  ::-webkit-scrollbar-thumb{ background:linear-gradient(var(--cyan), var(--blue)); border-radius:10px; }
+
+  .eyebrow{
+    font-family:'Orbitron',sans-serif; font-size:12px; font-weight:600; letter-spacing:4px; color:var(--cyan);
+    text-transform:uppercase; margin-bottom:18px; display:flex; align-items:center; gap:12px;
+    text-shadow:0 0 14px rgba(77,235,255,0.55);
+  }
+  .eyebrow::before{ content:""; width:26px; height:2px; background:var(--cyan); box-shadow:0 0 10px var(--cyan); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:10px;
+    padding:16px 32px; border-radius:6px; font-weight:700; font-size:14px;
+    font-family:'Orbitron',sans-serif; letter-spacing:1.5px; text-transform:uppercase;
+    cursor:pointer; border:1px solid transparent; transition:transform .25s ease, box-shadow .35s ease, background .25s ease, border-color .25s ease;
+    white-space:nowrap; position:relative; overflow:hidden;
+  }
+  .btn-primary{
+    background:linear-gradient(90deg, var(--blue), var(--cyan)); color:#03131a;
+    box-shadow:0 0 20px rgba(77,235,255,0.35), 0 0 0px rgba(77,235,255,0);
+  }
+  .btn-primary:hover{ transform:translateY(-2px); box-shadow:0 0 34px rgba(77,235,255,0.65); }
+  .btn-ghost{
+    background:rgba(77,235,255,0.04); color:var(--cyan); border:1px solid var(--line);
+  }
+  .btn-ghost:hover{ background:rgba(77,235,255,0.1); border-color:var(--cyan); box-shadow:0 0 22px rgba(77,235,255,0.25); transform:translateY(-2px); }
+  .btn-light{ background:#fff; color:#03131a; }
+  .btn-light:hover{ transform:translateY(-2px); box-shadow:0 0 30px rgba(255,255,255,0.4); }
+
+  /* ---------- NAV ---------- */
+  header.nav{
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    padding:22px 0; transition:background .3s ease, padding .3s ease, border-color .3s ease;
+    border-bottom:1px solid transparent;
+  }
+  header.nav.scrolled{
+    background:rgba(4,7,13,0.75); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    padding:15px 0; border-bottom:1px solid var(--line);
+  }
+  .nav-inner{ display:flex; align-items:center; justify-content:space-between; }
+  .nav-logo{ display:flex; align-items:center; gap:12px; font-weight:800; font-size:18px; color:#fff; }
+  .nav-logo img{ height:28px; width:auto; filter:drop-shadow(0 0 10px rgba(77,235,255,0.5)); }
+  .nav-links{ display:flex; align-items:center; gap:38px; font-size:14px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; font-family:'Orbitron',sans-serif; font-size:12px; }
+  .nav-links a{ opacity:.7; transition:all .2s ease; position:relative; padding-bottom:4px; }
+  .nav-links a::after{ content:""; position:absolute; left:0; bottom:0; width:0; height:1px; background:var(--cyan); box-shadow:0 0 8px var(--cyan); transition:width .25s ease; }
+  .nav-links a:hover{ opacity:1; color:var(--cyan); }
+  .nav-links a:hover::after{ width:100%; }
+  .nav-cta{ display:flex; align-items:center; gap:16px; }
+  .nav-cta .btn{ padding:12px 22px; font-size:11.5px; }
+  .nav-burger{ display:none; width:26px; height:20px; position:relative; cursor:pointer; }
+  .nav-burger span{ position:absolute; left:0; right:0; height:2px; background:var(--cyan); box-shadow:0 0 8px var(--cyan); border-radius:2px; transition:all .3s ease; }
+  .nav-burger span:nth-child(1){ top:0; }
+  .nav-burger span:nth-child(2){ top:9px; }
+  .nav-burger span:nth-child(3){ top:18px; }
+  .nav-burger.open span:nth-child(1){ transform:translateY(9px) rotate(45deg); }
+  .nav-burger.open span:nth-child(2){ opacity:0; }
+  .nav-burger.open span:nth-child(3){ transform:translateY(-9px) rotate(-45deg); }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    min-height:100vh; display:flex; align-items:center; position:relative;
+    padding-top:110px; overflow:hidden; background:var(--bg);
+  }
+  #hero-canvas{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }
+  .hero-vignette{
+    position:absolute; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(80% 60% at 30% 40%, rgba(4,7,13,0) 0%, rgba(4,7,13,0.55) 70%, rgba(4,7,13,0.92) 100%);
+  }
+  .hero .wrap{ position:relative; z-index:2; display:grid; grid-template-columns:1.05fr 0.95fr; gap:40px; align-items:center; width:100%; }
+  .hero-copy h1{
+    font-size:52px; line-height:1.12; font-weight:800; margin:20px 0 24px; letter-spacing:0.5px;
+    text-transform:uppercase;
+  }
+  .hero-copy h1 .glow{ color:var(--cyan); text-shadow:0 0 18px rgba(77,235,255,0.85), 0 0 40px rgba(77,235,255,0.4); }
+  .hero-copy p.lead{ font-size:18px; color:var(--muted); max-width:520px; margin-bottom:36px; font-weight:500; }
+  .hero-ctas{ display:flex; gap:18px; margin-bottom:48px; flex-wrap:wrap; }
+  .trust-strip{ display:flex; gap:12px; flex-wrap:wrap; }
+  .pill{
+    font-size:11.5px; font-weight:700; letter-spacing:1px; font-family:'Orbitron',sans-serif; color:var(--cyan);
+    background:rgba(77,235,255,0.05); border:1px solid var(--line);
+    padding:10px 16px; border-radius:999px; display:flex; align-items:center; gap:9px;
+  }
+  .pill .dot{ width:6px; height:6px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); animation:blink 2s ease-in-out infinite; }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .hero-visual{ position:relative; height:460px; }
+  .hero-visual.fallback-orbit::before,
+  .hero-visual.fallback-orbit::after{
+    content:""; position:absolute; border-radius:50%; border:1.5px solid rgba(77,235,255,0.35);
+    top:50%; left:50%; transform:translate(-50%,-50%); box-shadow:0 0 30px rgba(77,235,255,0.2);
+  }
+  .hero-visual.fallback-orbit::before{ width:280px; height:280px; animation:spin 14s linear infinite; }
+  .hero-visual.fallback-orbit::after{ width:380px; height:380px; border-color:rgba(57,255,176,0.3); animation:spin 22s linear infinite reverse; }
+  @keyframes spin{ from{ transform:translate(-50%,-50%) rotate(0deg); } to{ transform:translate(-50%,-50%) rotate(360deg); } }
+  .scroll-cue{
+    position:absolute; bottom:34px; left:50%; transform:translateX(-50%); z-index:3;
+    display:flex; flex-direction:column; align-items:center; gap:8px; font-size:11px; color:var(--cyan);
+    letter-spacing:3px; text-transform:uppercase; font-weight:600; font-family:'Orbitron',sans-serif;
+  }
+  .scroll-cue .line{ width:1px; height:36px; background:linear-gradient(var(--cyan), transparent); animation:scrollpulse 1.8s ease-in-out infinite; box-shadow:0 0 8px var(--cyan); }
+  @keyframes scrollpulse{ 0%,100%{opacity:.2;} 50%{opacity:1;} }
+
+  /* ---------- REVEAL ---------- */
+  .reveal{ opacity:0; transform:translateY(30px); transition:opacity .8s cubic-bezier(.22,.8,.32,1), transform .8s cubic-bezier(.22,.8,.32,1); }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+  .reveal.d1{ transition-delay:.08s; } .reveal.d2{ transition-delay:.16s; } .reveal.d3{ transition-delay:.24s; } .reveal.d4{ transition-delay:.32s; }
+
+  /* ---------- SECTION HEADERS ---------- */
+  .sec-head{ max-width:660px; margin-bottom:56px; }
+  .sec-head h2{ font-size:34px; font-weight:700; line-height:1.25; letter-spacing:0.5px; text-transform:uppercase; }
+  .sec-head p{ font-size:16.5px; margin-top:18px; color:var(--muted); font-weight:500; }
+  .sec-pad{ padding:130px 0; }
+
+  /* ---------- PROBLEM ---------- */
+  .problem{ background:var(--bg); }
+  .problem-grid{ display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:28px; perspective:1200px; }
+  .p-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:38px;
+    display:flex; gap:22px; transition:transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+    position:relative;
+  }
+  .p-card:hover{ transform:translateY(-5px); box-shadow:var(--shadow-glow); border-color:rgba(77,235,255,0.4); }
+  .icon-circle{
+    flex-shrink:0; width:56px; height:56px; border-radius:12px; background:rgba(77,235,255,0.06); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; color:var(--cyan);
+  }
+  .icon-circle svg{ width:26px; height:26px; filter:drop-shadow(0 0 6px rgba(77,235,255,0.5)); }
+  .p-card h3{ font-size:18px; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px; }
+  .p-card p{ font-size:15px; color:var(--muted); font-weight:500; }
+  .result-bar{
+    background:var(--panel-2); border:1px solid var(--line); color:#fff; border-radius:12px; padding:24px 30px; font-size:15.5px;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-weight:500;
+  }
+  .result-bar b{ color:var(--amber); font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:1px; text-shadow:0 0 10px rgba(255,138,61,0.5); }
+  .result-bar span{ color:var(--text); }
+
+  /* ---------- SOLUTION ---------- */
+  .solution{ background:var(--bg-2); }
+  .solution-grid{ display:grid; grid-template-columns:0.95fr 1.05fr; gap:60px; align-items:start; }
+  .solution-visual{ border-radius:16px; overflow:hidden; box-shadow:var(--shadow-glow); border:1px solid var(--line); position:relative; }
+  .solution-visual::after{ content:""; position:absolute; inset:0; border-radius:16px; box-shadow:inset 0 0 40px rgba(77,235,255,0.15); pointer-events:none; }
+  .solution-visual img{ width:100%; display:block; }
+  .feat-row{ display:flex; gap:18px; padding:22px 0; border-bottom:1px solid var(--line-soft); }
+  .feat-row:last-child{ border-bottom:none; }
+  .feat-icon{
+    flex-shrink:0; width:46px; height:46px; border-radius:10px; background:rgba(77,235,255,0.08); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; color:var(--cyan);
+  }
+  .feat-icon svg{ width:22px; height:22px; filter:drop-shadow(0 0 6px rgba(77,235,255,0.5)); }
+  .feat-row h4{ font-family:'Orbitron',sans-serif; font-size:15px; font-weight:700; color:#fff; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px; }
+  .feat-row p{ font-size:14px; color:var(--muted); font-weight:500; }
+
+  /* ---------- IMPACT ---------- */
+  .impact{ background:var(--bg); }
+  .impact .sec-head h2{ color:#fff; }
+  .impact-table{ border-radius:14px; overflow:hidden; border:1px solid var(--line); }
+  .impact-row{ display:grid; grid-template-columns:1fr 1.4fr 40px 1.4fr; gap:18px; align-items:center; padding:26px 28px; background:var(--panel); }
+  .impact-row + .impact-row{ border-top:1px solid var(--line-soft); }
+  .impact-row .label{ font-family:'Orbitron',sans-serif; font-weight:700; font-size:14px; color:#fff; text-transform:uppercase; letter-spacing:0.5px; }
+  .impact-cell{ display:flex; gap:14px; align-items:flex-start; padding:16px 18px; border-radius:10px; font-size:14px; font-weight:500; }
+  .impact-cell.before{ background:rgba(255,138,61,0.06); border:1px solid rgba(255,138,61,0.2); color:#D9BFAE; }
+  .impact-cell.after{ background:rgba(77,235,255,0.08); border:1px solid rgba(77,235,255,0.3); color:var(--text); }
+  .impact-cell svg{ width:20px; height:20px; flex-shrink:0; margin-top:2px; }
+  .impact-cell.before svg{ color:var(--amber); filter:drop-shadow(0 0 5px rgba(255,138,61,0.5)); }
+  .impact-cell.after svg{ color:var(--cyan); filter:drop-shadow(0 0 6px rgba(77,235,255,0.6)); }
+  .impact-arrow{ display:flex; align-items:center; justify-content:center; color:var(--cyan); filter:drop-shadow(0 0 6px rgba(77,235,255,0.6)); }
+  .impact-arrow svg{ width:20px; height:20px; }
+  .stat-strip{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-top:60px; }
+  .stat-card{ position:relative; overflow:hidden; text-align:center; padding:30px 14px; border-radius:14px; background:var(--panel); border:1px solid var(--line); transition:box-shadow .3s ease, border-color .3s ease; }
+  .stat-card:hover{ box-shadow:var(--shadow-glow); border-color:rgba(77,235,255,0.4); }
+  .stat-fill{ position:absolute; left:0; bottom:0; height:3px; width:0%; background:linear-gradient(90deg,var(--cyan),var(--good)); box-shadow:0 0 10px var(--cyan); transition:width 1.4s cubic-bezier(.2,.7,.2,1); }
+  .stat-num{ font-family:'Orbitron',sans-serif; font-size:32px; font-weight:800; color:var(--cyan); text-shadow:0 0 16px rgba(77,235,255,0.5); }
+  .stat-label{ font-size:12.5px; color:var(--muted); margin-top:10px; font-weight:600; letter-spacing:0.3px; }
+
+  /* ---------- USP ---------- */
+  .usp{ background:var(--bg-2); }
+  .usp-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; perspective:1200px; }
+  .usp-card{
+    padding:34px 30px; border-radius:14px; border:1px solid var(--line); background:var(--panel);
+    transition:transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+  }
+  .usp-card:hover{ transform:translateY(-6px); box-shadow:var(--shadow-glow); border-color:rgba(77,235,255,0.45); }
+  .usp-card .icon-circle{ margin-bottom:22px; }
+  .usp-card h3{ font-size:17px; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px; }
+  .usp-card p{ font-size:14.5px; color:var(--muted); font-weight:500; }
+
+  /* ---------- AUDIENCE ---------- */
+  .audience{ background:var(--bg); }
+  .aud-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; perspective:1200px; }
+  .aud-card{
+    background:var(--panel); border-radius:14px; padding:34px 22px; text-align:center; border:1px solid var(--line);
+    transition:transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+  }
+  .aud-card:hover{ transform:translateY(-5px); box-shadow:var(--shadow-glow); border-color:rgba(77,235,255,0.4); }
+  .aud-card .icon-circle{ margin:0 auto 20px; }
+  .aud-card h4{ font-family:'Orbitron',sans-serif; font-weight:700; font-size:14.5px; color:#fff; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px; }
+  .aud-card p{ font-size:13.5px; color:var(--muted); font-weight:500; }
+  .aud-note{
+    margin-top:36px; background:var(--panel-2); border:1px solid var(--line); color:#fff; border-radius:12px; padding:26px 30px; font-size:14.5px; line-height:1.8; font-weight:500;
+  }
+  .aud-note b{ color:var(--cyan); font-family:'Orbitron',sans-serif; font-size:12px; letter-spacing:1px; }
+
+  /* ---------- ROADMAP ---------- */
+  .roadmap{ background:var(--bg-2); }
+  .road-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; perspective:1200px; position:relative; }
+  .road-grid::before{
+    content:""; position:absolute; left:6%; right:6%; top:46px; height:2px; z-index:0;
+    background-image:repeating-linear-gradient(90deg, var(--cyan) 0 8px, transparent 8px 18px);
+    opacity:.4; animation:flowmove 1s linear infinite;
+  }
+  @keyframes flowmove{ from{ background-position:0 0; } to{ background-position:26px 0; } }
+  .road-col{ background:var(--panel); border-radius:14px; padding:28px; border:1px solid var(--line); border-top:2px solid var(--cyan); box-shadow:0 -1px 20px -4px rgba(77,235,255,0.25); }
+  .road-col:nth-child(2){ border-top-color:var(--blue); box-shadow:0 -1px 20px -4px rgba(46,111,242,0.25); }
+  .road-col:nth-child(3){ border-top-color:var(--good); box-shadow:0 -1px 20px -4px rgba(57,255,176,0.2); }
+  .road-head{ display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  .road-badge{ width:36px; height:36px; border-radius:8px; background:rgba(77,235,255,0.08); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--cyan); }
+  .road-badge svg{ width:16px; height:16px; filter:drop-shadow(0 0 5px rgba(77,235,255,0.6)); }
+  .road-col h4{ font-family:'Orbitron',sans-serif; font-size:16px; font-weight:700; letter-spacing:2px; color:#fff; }
+  .road-status{ font-size:12px; color:var(--muted); font-style:italic; margin:4px 0 20px 48px; }
+  .road-col ul{ list-style:none; }
+  .road-col li{ font-size:14px; color:var(--text); padding:12px 0 12px 20px; position:relative; border-top:1px solid var(--line-soft); font-weight:500; }
+  .road-col li:first-child{ border-top:none; }
+  .road-col li::before{ content:""; position:absolute; left:0; top:20px; width:6px; height:6px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
+
+  /* ---------- FINAL CTA ---------- */
+  .final-cta{
+    background:radial-gradient(80% 100% at 50% 0%, rgba(77,235,255,0.08), var(--bg) 60%);
+    color:#fff; text-align:center; padding:140px 0;
+  }
+  .final-cta h2{ color:#fff; font-size:38px; max-width:760px; margin:0 auto 22px; text-transform:uppercase; letter-spacing:0.5px; }
+  .final-cta h2 .glow{ color:var(--cyan); text-shadow:0 0 20px rgba(77,235,255,0.7); }
+  .final-cta p{ color:var(--muted); font-size:17px; margin-bottom:44px; font-weight:500; }
+  .final-cta .hero-ctas{ justify-content:center; }
+
+  /* ---------- FOOTER ---------- */
+  footer{ background:var(--bg); border-top:1px solid var(--line-soft); color:var(--muted); padding:50px 0 34px; }
+  .foot-inner{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; padding-bottom:30px; border-bottom:1px solid var(--line-soft); }
+  .foot-logo{ display:flex; align-items:center; gap:10px; }
+  .foot-logo img{ height:24px; filter:drop-shadow(0 0 8px rgba(77,235,255,0.4)); }
+  .foot-logo span{ color:#fff; font-weight:800; font-size:15px; font-family:'Orbitron',sans-serif; letter-spacing:1px; }
+  .foot-links{ display:flex; gap:30px; font-size:12px; font-weight:600; font-family:'Orbitron',sans-serif; letter-spacing:0.5px; text-transform:uppercase; }
+  .foot-links a:hover{ color:var(--cyan); }
+  .foot-bottom{ display:flex; justify-content:space-between; padding-top:26px; font-size:12px; flex-wrap:wrap; gap:10px; }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 980px){
+    .hero .wrap{ grid-template-columns:1fr; }
+    .hero-visual{ display:none; }
+    .hero-copy h1{ font-size:38px; }
+    .solution-grid{ grid-template-columns:1fr; }
+    .problem-grid{ grid-template-columns:1fr; }
+    .usp-grid{ grid-template-columns:repeat(2,1fr); }
+    .aud-grid{ grid-template-columns:repeat(2,1fr); }
+    .road-grid{ grid-template-columns:1fr; }
+    .stat-strip{ grid-template-columns:repeat(2,1fr); }
+    .impact-row{ grid-template-columns:1fr; }
+    .impact-arrow{ display:none; }
+    .nav-links, .nav-cta .btn-ghost{ display:none; }
+    .nav-burger{ display:block; }
+  }
+  @media (max-width: 560px){
+    .wrap{ padding:0 20px; }
+    .sec-head h2{ font-size:24px; }
+    .hero-copy h1{ font-size:28px; }
+    .usp-grid, .aud-grid{ grid-template-columns:1fr; }
+    .final-cta h2{ font-size:26px; }
+    .sec-pad{ padding:90px 0; }
+  }
+
+  /* ---------- MOBILE NAV DRAWER ---------- */
+  .mobile-drawer{
+    position:fixed; inset:0; background:var(--bg); z-index:99; display:flex; flex-direction:column;
+    padding:110px 32px 40px; gap:28px; font-size:20px; font-weight:700; color:#fff;
+    font-family:'Orbitron',sans-serif; text-transform:uppercase; letter-spacing:1px;
+    transform:translateX(100%); transition:transform .35s ease; border-left:1px solid var(--line);
+  }
+  .mobile-drawer.open{ transform:translateX(0); }
+</style>
+</head>
+<body>
+
+<div class="boot-loader" id="bootLoader">
+  <div class="boot-inner">
+    <div class="boot-logo">I&#8209;VISION</div>
+    <div class="boot-lines" id="bootLines"></div>
+    <div class="boot-bar"><div class="boot-bar-fill" id="bootBarFill"></div></div>
+    <div class="boot-skip">Click to skip</div>
+  </div>
+</div>
+
+<div class="cursor-dot" id="cursorDot"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<nav class="side-nav" id="sideNav">
+  <a href="#problem" data-label="Problem"></a>
+  <a href="#product" data-label="Platform"></a>
+  <a href="#impact" data-label="Impact"></a>
+  <a href="#why" data-label="Why Us"></a>
+  <a href="#usecases" data-label="Use Cases"></a>
+  <a href="#roadmap" data-label="Roadmap"></a>
+  <a href="#contact" data-label="Contact"></a>
+</nav>
+
+<div class="cursor-glow" id="cursorGlow"></div>
+<div class="scanline-overlay"></div>
+
+<!-- ================= NAV ================= -->
+<header class="nav" id="siteNav">
+  <div class="wrap nav-inner">
+    <a href="#top" class="nav-logo"><img src="assets/logo.png" alt="I-Vision logo"></a>
+    <nav class="nav-links">
+      <a href="#product">Product</a>
+      <a href="#impact">Impact</a>
+      <a href="#why">Why Us</a>
+      <a href="#usecases">Use Cases</a>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="#contact" class="btn btn-ghost">Contact</a>
+      <a href="#contact" class="btn btn-primary">Request Demo</a>
+    </div>
+    <div class="nav-burger" id="burger"><span></span><span></span><span></span></div>
+  </div>
+</header>
+
+<div class="mobile-drawer" id="drawer">
+  <a href="#product">Product</a>
+  <a href="#impact">Impact</a>
+  <a href="#why">Why Us</a>
+  <a href="#usecases">Use Cases</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#contact" class="btn btn-primary" style="margin-top:10px;">Request a Demo</a>
+</div>
+
+<!-- ================= HERO ================= -->
+<section class="hero" id="top">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-vignette"></div>
+  <div class="wrap">
+    <div class="hero-copy">
+      <div class="eyebrow">Industrial Computer Vision Platform</div>
+      <h1>One platform.<br>Every stage of <span class="glow">computer vision.</span></h1>
+      <p class="lead">From raw footage to a deployed AI model — annotate, train, and deploy computer vision models in-house, completely offline. No cloud dependency. No specialist team required.</p>
+      <div class="hero-ctas">
+        <a href="#contact" class="btn btn-primary">Request a Demo</a>
+        <a href="#product" class="btn btn-ghost">See How It Works</a>
+      </div>
+      <div class="trust-strip">
+        <div class="pill"><span class="dot"></span>Self-hosted</div>
+        <div class="pill"><span class="dot"></span>100% Offline</div>
+        <div class="pill"><span class="dot"></span>No-code Training</div>
+        <div class="pill"><span class="dot"></span>Enterprise RBAC</div>
+      </div>
+    </div>
+    <div class="hero-visual"></div>
+  </div>
+  <div class="scroll-cue"><span>Scroll</span><div class="line"></div></div>
+</section>
+
+<!-- ================= PROBLEM ================= -->
+<section class="problem sec-pad" id="problem">
+  <span class="ghost-num">01</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">The Problem</div>
+      <h2>Computer vision projects stall before they ever reach production</h2>
+    </div>
+    <div class="problem-grid">
+      <div class="p-card reveal d1 tilt-card">
+        <div class="icon-circle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+        </div>
+        <div>
+          <h3>Stitched together across vendors</h3>
+          <p>Detecting defects, tracking people and objects, reading gauges — doing this today means stitching together separate tools for data labeling, model training, deployment, and monitoring, usually across multiple vendors or cloud services.</p>
+        </div>
+      </div>
+      <div class="p-card reveal d2 tilt-card">
+        <div class="icon-circle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        </div>
+        <div>
+          <h3>Slow, costly, and out of your control</h3>
+          <p>It's slow, expensive, and requires specialist ML engineers — and it often means sensitive footage and data leave the company's own servers.</p>
+        </div>
+      </div>
+    </div>
+    <div class="result-bar reveal"><b>RESULT //</b> <span>CV initiatives stall in pilot phase, or get outsourced at high recurring cost.</span></div>
+  </div>
+</section>
+
+<!-- ================= SOLUTION ================= -->
+<div class="seam" style="background:var(--bg-2); clip-path:polygon(0 100%, 100% 0, 100% 100%);"></div>
+<section class="solution sec-pad" id="product">
+  <span class="ghost-num">02</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">The Platform</div>
+      <h2>One platform for the entire computer vision lifecycle</h2>
+      <p>A self-hosted platform that takes a team from raw footage to a working, deployed AI model — without leaving the building.</p>
+    </div>
+    <div class="solution-grid">
+      <div class="solution-visual reveal">
+        <img src="assets/hero-illustration-dark.jpg" alt="I-Vision capability overview: detection, segmentation, tracking, OCR, pose estimation, anomaly detection, facial recognition">
+      </div>
+      <div class="reveal d2">
+        <div class="feat-row">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <div><h4>Upload &amp; organize datasets</h4><p>Bring in raw footage and structure it into training-ready datasets.</p></div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/></svg></div>
+          <div><h4>Train models in a few clicks</h4><p>Object detection, segmentation, pose — no code required.</p></div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
+          <div><h4>Test instantly</h4><p>Live inference via webcam, file upload, or camera URL.</p></div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>
+          <div><h4>Full history &amp; tracking</h4><p>Every training run and inference logged and reviewable.</p></div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <div><h4>Enterprise-ready</h4><p>Built-in roles, permissions, and audit logs.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= IMPACT ================= -->
+<div class="seam" style="background:var(--bg); clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+<section class="impact sec-pad" id="impact">
+  <span class="ghost-num">03</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">The Impact</div>
+      <h2>Before vs. after I-Vision</h2>
+      <p>Real numbers from replacing a fragmented, cloud-dependent workflow with one in-house platform.</p>
+    </div>
+    <div class="impact-table reveal">
+      <div class="impact-row">
+        <div class="label">Annotation<br>Tooling</div>
+        <div class="impact-cell before">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M6 8l6-5 6 5M6 8c0 3 2.5 3 3 5s-1 3-1 3M18 8c0 3-2.5 3-3 5s1 3 1 3"/></svg>
+          Paid cloud tools (Datature, Roboflow) — ~₹15,00,000/yr, data leaves premises
+        </div>
+        <div class="impact-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="impact-cell after">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M6 8l6-5 6 5M6 8c0 3 2.5 3 3 5s-1 3-1 3M18 8c0 3-2.5 3-3 5s1 3 1 3"/></svg>
+          In-house, built by us — 100% free and completely offline
+        </div>
+      </div>
+      <div class="impact-row">
+        <div class="label">Annotation<br>Effort</div>
+        <div class="impact-cell before">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Manual annotation (e.g. CVAT) — 10–15 people, weeks to months
+        </div>
+        <div class="impact-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="impact-cell after">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
+          Auto-annotation — 1 person, a few hours
+        </div>
+      </div>
+      <div class="impact-row">
+        <div class="label">Model<br>Training</div>
+        <div class="impact-cell before">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/></svg>
+          Required dedicated ML / engineering capability
+        </div>
+        <div class="impact-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="impact-cell after">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/></svg>
+          Done in a few clicks — no ML expertise needed
+        </div>
+      </div>
+      <div class="impact-row">
+        <div class="label">App<br>Development</div>
+        <div class="impact-cell before">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          Skilled software engineers, long development cycles
+        </div>
+        <div class="impact-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="impact-cell after">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          Anyone, limited technical knowledge — minutes
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat-card reveal"><div class="stat-num" data-count="15" data-prefix="₹" data-suffix="L">₹0L</div><div class="stat-label">Saved per year on annotation tools</div><div class="stat-fill"></div></div>
+      <div class="stat-card reveal d1"><div class="stat-num" data-count="15" data-suffix="&rarr;1">0</div><div class="stat-label">People needed for annotation</div><div class="stat-fill"></div></div>
+      <div class="stat-card reveal d2"><div class="stat-num" data-count="100" data-suffix="%">0%</div><div class="stat-label">Offline &amp; self-hosted</div><div class="stat-fill"></div></div>
+      <div class="stat-card reveal d3"><div class="stat-num" data-count="1" data-prefix="&lt;" data-suffix="cmd">0</div><div class="stat-label">To deploy the whole platform</div><div class="stat-fill"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= WHY US / USP ================= -->
+<div class="seam" style="background:var(--bg-2); clip-path:polygon(0 100%, 100% 0, 100% 100%);"></div>
+<section class="usp sec-pad" id="why">
+  <span class="ghost-num">04</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">Why I-Vision Wins</div>
+      <h2>Built to remove every barrier to adopting computer vision</h2>
+    </div>
+    <div class="usp-grid">
+      <div class="usp-card reveal d1 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M6 8l6-5 6 5M6 8c0 3 2.5 3 3 5s-1 3-1 3M18 8c0 3-2.5 3-3 5s1 3 1 3"/></svg></div>
+        <h3>Massive cost savings</h3>
+        <p>Eliminates recurring cloud annotation license spend entirely — ~₹15L/year back to the business.</p>
+      </div>
+      <div class="usp-card reveal d2 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <h3>Fully offline &amp; secure</h3>
+        <p>Self-hosted — sensitive footage and data never leave company infrastructure.</p>
+      </div>
+      <div class="usp-card reveal d3 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+        <h3>One unified platform</h3>
+        <p>Replaces 4–5 disconnected tools with a single system for data, training, and inference.</p>
+      </div>
+      <div class="usp-card reveal d1 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11.75V15a3 3 0 0 0 6 0v-3.25"/><path d="M3 3l7.07 17.5 2.51-7.39L20 11.07 3 3z"/></svg></div>
+        <h3>No specialist dependency</h3>
+        <p>Annotation, training, and app-building can be done by non-engineers, in clicks.</p>
+      </div>
+      <div class="usp-card reveal d2 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></div>
+        <h3>Deploys in one command</h3>
+        <p>Docker-based setup — days, not months, to stand up.</p>
+      </div>
+      <div class="usp-card reveal d3 tilt-card">
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <h3>Fast, real results</h3>
+        <p>From raw footage to a working model in days — not a multi-quarter engineering project.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= USE CASES ================= -->
+<div class="seam" style="background:var(--bg); clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+<section class="audience sec-pad" id="usecases">
+  <span class="ghost-num">05</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">Built For</div>
+      <h2>Who I-Vision is built for</h2>
+    </div>
+    <div class="aud-grid">
+      <div class="aud-card reveal d1 tilt-card">
+        <div class="icon-circle" style="margin:0 auto 20px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4l-6 4Z"/></svg></div>
+        <h4>Manufacturing</h4>
+        <p>Quality inspection, defect detection on the line</p>
+      </div>
+      <div class="aud-card reveal d2 tilt-card">
+        <div class="icon-circle" style="margin:0 auto 20px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 7h20l-2 5H4L2 7z"/><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M9 21v-6h6v6"/></svg></div>
+        <h4>Retail</h4>
+        <p>Foot traffic analysis, loss prevention</p>
+      </div>
+      <div class="aud-card reveal d3 tilt-card">
+        <div class="icon-circle" style="margin:0 auto 20px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="7" width="15" height="12" rx="1"/><path d="M16 11h4l3 3v5h-7z"/><circle cx="6" cy="21" r="2"/><circle cx="18" cy="21" r="2"/></svg></div>
+        <h4>Logistics &amp; warehousing</h4>
+        <p>Package tracking, safety compliance</p>
+      </div>
+      <div class="aud-card reveal d4 tilt-card">
+        <div class="icon-circle" style="margin:0 auto 20px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+        <h4>Security &amp; surveillance</h4>
+        <p>Real-time monitoring and alerting</p>
+      </div>
+    </div>
+    <div class="aud-note reveal">
+      <b>PRIMARY BUYER //</b> Head of Operations / IT Director / Innovation lead — wants results without hiring an ML team.<br>
+      <b>SECONDARY //</b> System integrators &amp; AI consultancies deploying CV solutions for multiple clients.
+    </div>
+  </div>
+</section>
+
+<!-- ================= ROADMAP ================= -->
+<div class="seam" style="background:var(--bg-2); clip-path:polygon(0 100%, 100% 0, 100% 100%);"></div>
+<section class="roadmap sec-pad" id="roadmap">
+  <span class="ghost-num">06</span>
+  <div class="wrap">
+    <div class="sec-head reveal hud-frame">
+      <div class="eyebrow">Scope &amp; Roadmap</div>
+      <h2>This isn't a static tool — it grows</h2>
+    </div>
+    <div class="road-grid">
+      <div class="road-col reveal d1 tilt-card">
+        <div class="road-head"><div class="road-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div><h4>NOW</h4></div>
+        <div class="road-status">Shipping today</div>
+        <ul>
+          <li>10+ vision modules including detection, segmentation &amp; pose training</li>
+          <li>In-house auto-annotation engine</li>
+          <li>Inference playground + admin &amp; RBAC</li>
+          <li>Supports 12 cameras input simultaneously</li>
+        </ul>
+      </div>
+      <div class="road-col reveal d2 tilt-card">
+        <div class="road-head"><div class="road-badge" style="color:var(--blue);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div><h4>NEXT</h4></div>
+        <div class="road-status">In development</div>
+        <ul>
+          <li>Support for Raspberry Pi and small devices</li>
+          <li>Support for more complex workflows</li>
+          <li>Support for 30+ cameras</li>
+        </ul>
+      </div>
+      <div class="road-col reveal d3 tilt-card">
+        <div class="road-head"><div class="road-badge" style="color:var(--good);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div><h4>LATER</h4></div>
+        <div class="road-status">On the roadmap</div>
+        <ul>
+          <li>Multi-tenant SaaS offering</li>
+          <li>Extensions support</li>
+          <li>Integrations with ERP &amp; security systems</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FINAL CTA ================= -->
+<div class="seam" style="background:var(--bg); clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+<section class="final-cta" id="contact">
+  <div class="wrap">
+    <div class="reveal">
+      <h2>Let's bring <span class="glow">computer vision</span> to your production line.</h2>
+      <p>Talk to us about a pilot deployment — no cloud, no lock-in, no specialist team required.</p>
+      <div class="hero-ctas">
+        <a href="mailto:altafbarhi@gmail.com" class="btn btn-primary">Request a Demo</a>
+        <a href="mailto:altafbarhi@gmail.com" class="btn btn-ghost">Contact Us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <div class="foot-inner">
+      <div class="foot-logo"><img src="assets/logo.png" alt="I-Vision"><span>I-VISION</span></div>
+      <div class="foot-links">
+        <a href="#product">Product</a>
+        <a href="#impact">Impact</a>
+        <a href="#why">Why Us</a>
+        <a href="#usecases">Use Cases</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>&copy; 2026 I-Vision · Industrial Vision Platform. All rights reserved.</span>
+      <span>Built in-house. Deployed offline. Ready to scale.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/three.min.js"></script>
+<script>
+/* ============ BOOT SEQUENCE ============ */
+(function(){
+  const loader = document.getElementById('bootLoader');
+  const linesEl = document.getElementById('bootLines');
+  const barFill = document.getElementById('bootBarFill');
+  if (!loader) return;
+
+  const messages = [
+    'INITIALIZING I-VISION CORE...',
+    'LOADING VISION MODULES...',
+    'CALIBRATING SENSOR ARRAY...',
+    'SYSTEM READY.'
+  ];
+  document.body.style.overflow = 'hidden';
+  let i = 0;
+  function nextLine(){
+    if (i < messages.length){
+      const d = document.createElement('div');
+      d.textContent = '> ' + messages[i];
+      linesEl.appendChild(d);
+      i++;
+      barFill.style.width = Math.min(100, (i / messages.length) * 100) + '%';
+      setTimeout(nextLine, 340);
+    }
+  }
+  nextLine();
+
+  function finishBoot(){
+    if (loader.classList.contains('done')) return;
+    loader.classList.add('done');
+    document.body.style.overflow = '';
+    setTimeout(() => loader.remove(), 700);
+  }
+  loader.addEventListener('click', finishBoot);
+  setTimeout(finishBoot, 1900);
+})();
+
+/* ============ CUSTOM CAMERA-RETICLE CURSOR (fine pointers only) ============ */
+(function(){
+  const isFinePointer = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
+  const dot = document.getElementById('cursorDot');
+  const ring = document.getElementById('cursorRing');
+  if (!isFinePointer || !dot || !ring) return;
+
+  document.body.classList.add('custom-cursor');
+  let rx = window.innerWidth/2, ry = window.innerHeight/2, lx = rx, ly = ry;
+
+  window.addEventListener('mousemove', (e) => {
+    rx = e.clientX; ry = e.clientY;
+    dot.style.transform = `translate(${rx}px, ${ry}px) translate(-50%,-50%)`;
+    dot.classList.add('active'); dot.style.opacity = '1';
+    ring.classList.add('active');
+  });
+  window.addEventListener('mouseleave', () => { dot.style.opacity = '0'; ring.classList.remove('active'); });
+
+  function loop(){
+    lx += (rx - lx) * 0.18;
+    ly += (ry - ly) * 0.18;
+    ring.style.transform = `translate(${lx}px, ${ly}px) translate(-50%,-50%)`;
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  document.querySelectorAll('a, button, .btn, .tilt-card, input, textarea').forEach(el => {
+    el.addEventListener('mouseenter', () => ring.classList.add('hovering'));
+    el.addEventListener('mouseleave', () => ring.classList.remove('hovering'));
+  });
+})();
+
+/* ============ MAGNETIC BUTTONS ============ */
+document.querySelectorAll('.btn').forEach(btn => {
+  btn.addEventListener('mousemove', (e) => {
+    const r = btn.getBoundingClientRect();
+    const mx = (e.clientX - r.left - r.width/2) * 0.25;
+    const my = (e.clientY - r.top - r.height/2) * 0.35;
+    btn.style.transform = `translate(${mx.toFixed(1)}px, ${my.toFixed(1)}px)`;
+  });
+  btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+});
+
+/* ============ SIDE SCROLL-PROGRESS NAV ============ */
+(function(){
+  const links = document.querySelectorAll('.side-nav a');
+  if (!links.length) return;
+  const map = {};
+  links.forEach(a => { map[a.getAttribute('href').slice(1)] = a; });
+  const targets = Object.keys(map).map(id => document.getElementById(id)).filter(Boolean);
+  const sideIO = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting){
+        links.forEach(a => a.classList.remove('active'));
+        const link = map[entry.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.5 });
+  targets.forEach(t => sideIO.observe(t));
+})();
+
+/* ============ NAV SCROLL + MOBILE DRAWER ============ */
+const nav = document.getElementById('siteNav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+const burger = document.getElementById('burger');
+const drawer = document.getElementById('drawer');
+burger.addEventListener('click', () => {
+  burger.classList.toggle('open');
+  drawer.classList.toggle('open');
+});
+drawer.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+  burger.classList.remove('open'); drawer.classList.remove('open');
+}));
+
+/* ============ REVEAL ON SCROLL ============ */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { threshold: 0.15 });
+revealEls.forEach(el => io.observe(el));
+
+/* ============ COUNT-UP STATS ============ */
+const counters = document.querySelectorAll('.stat-num');
+const countIO = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const el = entry.target;
+    const target = parseFloat(el.getAttribute('data-count'));
+    const prefix = el.getAttribute('data-prefix') || '';
+    const suffix = el.getAttribute('data-suffix') || '';
+    let cur = 0;
+    const dur = 1400;
+    const start = performance.now();
+    function tick(now){
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      cur = target * eased;
+      el.innerHTML = prefix + Math.round(cur) + suffix;
+      if (p < 1) requestAnimationFrame(tick); else el.innerHTML = prefix + target + suffix;
+    }
+    requestAnimationFrame(tick);
+    countIO.unobserve(el);
+  });
+}, { threshold: 0.4 });
+counters.forEach(el => countIO.observe(el));
+
+/* ============ STAT PROGRESS FILL (synced with the count-up) ============ */
+const fillIO = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const fill = entry.target.querySelector('.stat-fill');
+    if (fill) requestAnimationFrame(() => { fill.style.width = '100%'; });
+    fillIO.unobserve(entry.target);
+  });
+}, { threshold: 0.4 });
+document.querySelectorAll('.stat-card').forEach(el => fillIO.observe(el));
+
+/* ============ CURSOR-FOLLOW GLOW ============ */
+const cursorGlow = document.getElementById('cursorGlow');
+if (cursorGlow){
+  let gx = window.innerWidth/2, gy = window.innerHeight/2, cx = gx, cy = gy;
+  window.addEventListener('mousemove', (e) => {
+    gx = e.clientX; gy = e.clientY;
+    cursorGlow.style.opacity = '1';
+  });
+  window.addEventListener('mouseleave', () => { cursorGlow.style.opacity = '0'; });
+  function followCursor(){
+    cx += (gx - cx) * 0.12;
+    cy += (gy - cy) * 0.12;
+    cursorGlow.style.transform = `translate(${cx}px, ${cy}px) translate(-50%, -50%)`;
+    requestAnimationFrame(followCursor);
+  }
+  followCursor();
+}
+
+/* ============ 3D TILT ON CARDS ============ */
+document.querySelectorAll('.tilt-card').forEach(card => {
+  card.addEventListener('mousemove', (e) => {
+    const r = card.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - 0.5;
+    const py = (e.clientY - r.top) / r.height - 0.5;
+    card.style.transform = `perspective(900px) rotateX(${(-py*7).toFixed(2)}deg) rotateY(${(px*7).toFixed(2)}deg) translateY(-4px)`;
+  });
+  card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+});
+
+/* ============ ICON DRAW-IN ON REVEAL ============ */
+function drawInIcons(root){
+  root.querySelectorAll('svg').forEach(svg => {
+    svg.querySelectorAll('path, polyline, polygon, rect, circle, line').forEach(shape => {
+      if (shape.dataset.drawn) return;
+      let len = 60;
+      try{ len = shape.getTotalLength ? shape.getTotalLength() : 60; } catch(e){}
+      shape.style.strokeDasharray = len;
+      shape.style.strokeDashoffset = len;
+      shape.getBoundingClientRect(); // force reflow
+      requestAnimationFrame(() => { shape.style.strokeDashoffset = 0; });
+      shape.dataset.drawn = '1';
+    });
+  });
+}
+const iconIO = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    drawInIcons(entry.target);
+    iconIO.unobserve(entry.target);
+  });
+}, { threshold: 0.2 });
+document.querySelectorAll('.icon-circle, .feat-icon').forEach(el => iconIO.observe(el));
+
+/* ============ THREE.JS TRON-STYLE HERO SCENE ============ */
+(function(){
+  const canvas = document.getElementById('hero-canvas');
+  const heroVisual = document.querySelector('.hero-visual');
+
+  if (!canvas || !window.THREE){
+    if (heroVisual) heroVisual.classList.add('fallback-orbit');
+    console.warn('I-Vision hero: THREE.js unavailable, showing CSS fallback.');
+    return;
+  }
+
+  let renderer;
+  try{
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch(err){
+    if (heroVisual) heroVisual.classList.add('fallback-orbit');
+    console.warn('I-Vision hero: WebGL init failed, showing CSS fallback.', err);
+    return;
+  }
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x04070d, 0.05);
+
+  const camera = new THREE.PerspectiveCamera(55, canvas.parentElement.clientWidth / canvas.parentElement.clientHeight, 0.1, 200);
+  camera.position.set(2.5, 3.2, 15.5);
+  camera.lookAt(2.5, 0.5, 0);
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  function sizeRenderer(){
+    const w = canvas.parentElement.clientWidth;
+    const h = canvas.parentElement.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  sizeRenderer();
+
+  // ---- lighting ----
+  scene.add(new THREE.AmbientLight(0x1c3a52, 0.7));
+  const key = new THREE.DirectionalLight(0x4DEBFF, 1.1);
+  key.position.set(4, 6, 8);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x2E6FF2, 0.7);
+  rim.position.set(-6, 2, -4);
+  scene.add(rim);
+
+  const world = new THREE.Group();
+  scene.add(world);
+
+  /* ---- TRON GRID FLOOR ---- */
+  function makeGridTexture(){
+    const size = 1024;
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#04070d';
+    ctx.fillRect(0, 0, size, size);
+    const cell = 64;
+    ctx.strokeStyle = 'rgba(77,235,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(77,235,255,0.9)';
+    ctx.shadowBlur = 8;
+    for (let x = 0; x <= size; x += cell){
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.globalAlpha = (x/cell) % 4 === 0 ? 0.9 : 0.35; ctx.stroke();
+    }
+    for (let y = 0; y <= size; y += cell){
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.globalAlpha = (y/cell) % 4 === 0 ? 0.9 : 0.35; ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(10, 10);
+    return tex;
+  }
+  const gridTex = makeGridTexture();
+  const gridMat = new THREE.MeshBasicMaterial({ map: gridTex, transparent: true, opacity: 0.55 });
+  const gridPlane = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), gridMat);
+  gridPlane.rotation.x = -Math.PI / 2;
+  gridPlane.position.y = -2.6;
+  world.add(gridPlane);
+
+  /* ---- soft glow sprite behind the core ---- */
+  function makeGlowTexture(hex){
+    const size = 512;
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    g.addColorStop(0, hex + 'aa');
+    g.addColorStop(0.45, hex + '33');
+    g.addColorStop(1, hex + '00');
+    ctx.fillStyle = g; ctx.fillRect(0,0,size,size);
+    return new THREE.CanvasTexture(c);
+  }
+  const glowMat = new THREE.SpriteMaterial({ map: makeGlowTexture('#4DEBFF'), transparent: true, depthWrite:false, blending: THREE.AdditiveBlending });
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.set(13, 13, 1);
+  glow.position.set(2.5, 1.2, 0);
+  world.add(glow);
+
+  /* ---- floating core group (the "AI eye") ---- */
+  const core3d = new THREE.Group();
+  core3d.position.set(2.5, 1.2, 0);
+  world.add(core3d);
+
+  const coreGeo = new THREE.IcosahedronGeometry(1.7, 1);
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x0b1524, metalness: 0.6, roughness: 0.25, emissive: 0x0a2a3a, emissiveIntensity: 0.4, flatShading: true });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  core3d.add(core);
+
+  const coreGlowGeo = new THREE.IcosahedronGeometry(1.78, 1);
+  const coreGlowMat = new THREE.MeshBasicMaterial({ color: 0x4DEBFF, wireframe: true, transparent: true, opacity: 0.75 });
+  const coreGlow = new THREE.Mesh(coreGlowGeo, coreGlowMat);
+  core3d.add(coreGlow);
+
+  const shellGeo = new THREE.IcosahedronGeometry(2.7, 1);
+  const shellMat = new THREE.MeshBasicMaterial({ color: 0x2E6FF2, wireframe: true, transparent: true, opacity: 0.32 });
+  const shell = new THREE.Mesh(shellGeo, shellMat);
+  core3d.add(shell);
+
+  /* ---- camera lens ring: rigged separately from core3d so it always faces the viewer like a real lens, instead of tumbling ---- */
+  const lensRig = new THREE.Group();
+  lensRig.position.copy(core3d.position);
+  world.add(lensRig);
+  const lensGroup = new THREE.Group();
+  lensRig.add(lensGroup);
+
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(3.3, 0.03, 8, 80), new THREE.MeshBasicMaterial({ color: 0x4DEBFF, transparent:true, opacity:0.85 }));
+  lensGroup.add(lensRing);
+  const lensRingOuter = new THREE.Mesh(new THREE.TorusGeometry(3.55, 0.014, 8, 80), new THREE.MeshBasicMaterial({ color: 0x4DEBFF, transparent:true, opacity:0.35 }));
+  lensGroup.add(lensRingOuter);
+
+  // aperture / focus-ring ticks around the lens, like markings on a real camera lens barrel
+  const APERTURE_TICKS = 28;
+  const apertureBlades = [];
+  for (let i = 0; i < APERTURE_TICKS; i++){
+    const a = (i / APERTURE_TICKS) * Math.PI * 2;
+    const long = i % 4 === 0;
+    const tick = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.05, long ? 0.34 : 0.16),
+      new THREE.MeshBasicMaterial({ color: 0x4DEBFF, transparent:true, opacity: long ? 0.95 : 0.5, side: THREE.DoubleSide })
+    );
+    tick.position.set(Math.cos(a) * 3.42, Math.sin(a) * 3.42, 0);
+    tick.rotation.z = a + Math.PI / 2;
+    apertureBlades.push(tick);
+    lensGroup.add(tick);
+  }
+
+  /* ---- autofocus corner brackets: same visual language as the product's own detection UI ---- */
+  const bracketMat = new THREE.LineBasicMaterial({ color: 0x39FFB0, transparent: true, opacity: 0.85 });
+  const bracketGroup = new THREE.Group();
+  const BRACKET_R = 4.35, BRACKET_ARM = 0.85;
+  [[1,1],[-1,1],[-1,-1],[1,-1]].forEach(([sx, sy]) => {
+    const cx = BRACKET_R * sx, cy = BRACKET_R * sy;
+    const pts = [
+      new THREE.Vector3(cx - BRACKET_ARM*sx, cy, 0),
+      new THREE.Vector3(cx, cy, 0),
+      new THREE.Vector3(cx, cy - BRACKET_ARM*sy, 0)
+    ];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    bracketGroup.add(new THREE.Line(geo, bracketMat));
+  });
+  lensRig.add(bracketGroup);
+
+  // small "AI" focus-confirm dot at each bracket corner
+  const dotMat = new THREE.MeshBasicMaterial({ color: 0x39FFB0, transparent: true, opacity: 0.9 });
+  [[1,1],[-1,1],[-1,-1],[1,-1]].forEach(([sx, sy]) => {
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.045, 16), dotMat);
+    dot.position.set(BRACKET_R * sx, BRACKET_R * sy, 0.01);
+    bracketGroup.add(dot);
+  });
+
+  /* ---- node network floating around the core ---- */
+  const NODE_COUNT = 110;
+  const RADIUS = 5.6;
+  const nodePositions = [];
+  for (let i = 0; i < NODE_COUNT; i++){
+    const v = new THREE.Vector3(
+      (Math.random() - 0.5) * RADIUS * 2.2,
+      (Math.random() - 0.3) * RADIUS * 1.4,
+      (Math.random() - 0.5) * RADIUS * 1.8
+    );
+    if (v.length() < 2.2) v.setLength(2.2 + Math.random()*1.4);
+    nodePositions.push(v);
+  }
+  const pointGeo = new THREE.BufferGeometry();
+  const pointArr = new Float32Array(NODE_COUNT * 3);
+  nodePositions.forEach((v, i) => { pointArr[i*3]=v.x; pointArr[i*3+1]=v.y; pointArr[i*3+2]=v.z; });
+  pointGeo.setAttribute('position', new THREE.BufferAttribute(pointArr, 3));
+  const pointMat = new THREE.PointsMaterial({ color: 0x4DEBFF, size: 0.09, transparent: true, opacity: 0.95, sizeAttenuation: true, blending: THREE.AdditiveBlending });
+  core3d.add(new THREE.Points(pointGeo, pointMat));
+
+  const HL_COUNT = 10;
+  const hlIdx = new Set();
+  while (hlIdx.size < HL_COUNT) hlIdx.add(Math.floor(Math.random()*NODE_COUNT));
+  const hlArr = new Float32Array(HL_COUNT * 3);
+  let hi = 0;
+  hlIdx.forEach(i => { hlArr[hi*3]=nodePositions[i].x; hlArr[hi*3+1]=nodePositions[i].y; hlArr[hi*3+2]=nodePositions[i].z; hi++; });
+  const hlGeo = new THREE.BufferGeometry();
+  hlGeo.setAttribute('position', new THREE.BufferAttribute(hlArr, 3));
+  const hlMat = new THREE.PointsMaterial({ color: 0x39FFB0, size: 0.17, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
+  core3d.add(new THREE.Points(hlGeo, hlMat));
+
+  const maxDist = 2.1;
+  const linePositions = [];
+  for (let i = 0; i < NODE_COUNT; i++){
+    for (let j = i+1; j < NODE_COUNT; j++){
+      const d = nodePositions[i].distanceTo(nodePositions[j]);
+      if (d < maxDist){
+        linePositions.push(nodePositions[i].x, nodePositions[i].y, nodePositions[i].z);
+        linePositions.push(nodePositions[j].x, nodePositions[j].y, nodePositions[j].z);
+      }
+    }
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x4DEBFF, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending });
+  core3d.add(new THREE.LineSegments(lineGeo, lineMat));
+
+  /* ---- rising light particles (atmosphere) ---- */
+  const RISE_COUNT = 90;
+  const riseGeo = new THREE.BufferGeometry();
+  const riseArr = new Float32Array(RISE_COUNT * 3);
+  const riseSpeeds = new Float32Array(RISE_COUNT);
+  for (let i = 0; i < RISE_COUNT; i++){
+    riseArr[i*3] = (Math.random()-0.5) * 26;
+    riseArr[i*3+1] = -3 + Math.random() * 9;
+    riseArr[i*3+2] = (Math.random()-0.5) * 22 - 4;
+    riseSpeeds[i] = 0.01 + Math.random()*0.02;
+  }
+  riseGeo.setAttribute('position', new THREE.BufferAttribute(riseArr, 3));
+  const riseMat = new THREE.PointsMaterial({ color: 0x4DEBFF, size: 0.05, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending });
+  const risingParticles = new THREE.Points(riseGeo, riseMat);
+  world.add(risingParticles);
+
+  /* ---- distant vertical light pillars for depth ---- */
+  for (let i = 0; i < 6; i++){
+    const h = 6 + Math.random()*6;
+    const pillar = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.04, h),
+      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x4DEBFF : 0x2E6FF2, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })
+    );
+    pillar.position.set((Math.random()-0.5)*40, h/2 - 2.6, -14 - Math.random()*14);
+    world.add(pillar);
+  }
+
+  let mouseX = 0, mouseY = 0;
+  window.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth) - 0.5;
+    mouseY = (e.clientY / window.innerHeight) - 0.5;
+  });
+
+  let t = 0;
+  function animate(){
+    t += 0.005;
+
+    // grid "flying forward" motion
+    gridTex.offset.y -= 0.0016;
+
+    core3d.rotation.y = t * 0.5 + mouseX * 0.5;
+    core3d.rotation.x = Math.sin(t*0.4) * 0.12 + mouseY * 0.25;
+    core.rotation.y -= 0.004;
+    core.rotation.x += 0.0022;
+    coreGlow.rotation.copy(core.rotation);
+    shell.rotation.y += 0.0018;
+    shell.rotation.x -= 0.0011;
+
+    // lens rig always faces the camera, like a real lens looking back at you —
+    // it does NOT inherit core3d's tumble, so it always reads as "camera", not a spinning toy
+    lensRig.lookAt(camera.position);
+    lensGroup.rotation.z += 0.0022; // focus ring turning slowly
+    const apertureBreath = 1 + Math.sin(t * 1.1) * 0.035;
+    lensGroup.scale.set(apertureBreath, apertureBreath, 1);
+
+    // focus-lock brackets pulse in and out, like a camera confirming a detection
+    const lockPulse = 1 + Math.sin(t * 1.8) * 0.05;
+    bracketGroup.scale.set(lockPulse, lockPulse, 1);
+
+    const pulse = 1 + Math.sin(t*1.6) * 0.07;
+    glow.scale.set(13*pulse, 13*pulse, 1);
+    coreMat.emissiveIntensity = 0.35 + Math.sin(t*1.6) * 0.12;
+
+    // rising particles loop upward
+    const pos = risingParticles.geometry.attributes.position.array;
+    for (let i = 0; i < RISE_COUNT; i++){
+      pos[i*3+1] += riseSpeeds[i];
+      if (pos[i*3+1] > 6.5) pos[i*3+1] = -3;
+    }
+    risingParticles.geometry.attributes.position.needsUpdate = true;
+
+    camera.position.x = 2.5 + mouseX * 0.8;
+    camera.lookAt(2.5, 0.7, 0);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  window.addEventListener('resize', sizeRenderer);
+})();
+</script>
+</body>
+</html>
